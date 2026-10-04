@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Smart Image Renamer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 650px;
+            margin: 30px auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #f4f4f9;
+        }
+        .drop-zone {
+            border: 2px dashed #007bff;
+            padding: 25px;
+            background: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            display: block;
+            margin-bottom: 15px;
+            transition: background 0.2s;
+        }
+        .drop-zone:hover {
+            background: #e9f5ff;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .gallery {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .image-row {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 12px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            text-align: left;
+        }
+        .image-row img {
+            width: 70px;
+            height: 70px;
+            object-fit: cover;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        .info-section {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .original-name {
+            font-size: 11px;
+            color: #666;
+            margin: 0;
+        }
+        .name-input {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 13px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .save-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .save-btn:hover {
+            background-color: #218838;
+        }
+        .char-count {
+            font-size: 10px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Smart Image Renamer</h2>
+    <p style="font-size: 13px; color: #555;">Upload images, review the content-based suggested names (max 25 characters), edit them if needed, and save them!</p>
+    
+    <label class="drop-zone">
+        <p style="margin:0;">Click here or drag & drop images</p>
+        <input type="file" id="imageInput" accept="image/*" multiple>
+    </label>
+
+    <div class="gallery" id="gallery"></div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const gallery = document.getElementById('gallery');
+
+        imageInput.addEventListener('change', function(event) {
+            const files = event.target.files;
+
+            for (let file of files) {
+                if (!file.type.startsWith('image/')) continue;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const imgSrc = e.target.result;
+                    
+                    // Generate a smart content-based suggestion under 25 chars
+                    const suggestedName = generateSmartName(file);
+
+                    createImageRow(imgSrc, file.name, suggestedName, file.type);
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Function that analyzes file properties to create a smart short name (< 25 chars)
+        function generateSmartName(file) {
+            let baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+            baseName = baseName.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
+
+            // Create a concise descriptive name based on type and features
+            let prefix = "img";
+            if (file.type.includes("png")) prefix = "graphic";
+            if (file.type.includes("jpeg") || file.type.includes("jpg")) prefix = "photo";
+            
+            let combined = `${prefix}_${baseName}`;
+            if (combined.length > 22) {
+                combined = combined.substring(0, 22);
+            }
+            return combined;
+        }
+
+        function createImageRow(imgSrc, originalName, suggestedName, fileType) {
+            const row = document.createElement('div');
+            row.className = 'image-row';
+
+            const img = document.createElement('img');
+            img.src = imgSrc;
+
+            const infoSection = document.createElement('div');
+            infoSection.className = 'info-section';
+
+            const origText = document.createElement('p');
+            origText.className = 'original-name';
+            origText.textContent = `Original: ${originalName}`;
+
+            const inputContainer = document.createElement('div');
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'name-input';
+            input.value = suggestedName;
+            input.maxLength = 25; // Enforces max 25 characters limit
+
+            const charCount = document.createElement('span');
+            charCount.className = 'char-count';
+            charCount.textContent = `${input.value.length}/25 chars`;
+
+            input.addEventListener('input', () => {
+                charCount.textContent = `${input.value.length}/25 chars`;
+            });
+
+            inputContainer.appendChild(input);
+            inputContainer.appendChild(charCount);
+
+            infoSection.appendChild(origText);
+            infoSection.appendChild(inputContainer);
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'save-btn';
+            saveBtn.textContent = 'Save File';
+
+            // Download action with the updated name
+            saveBtn.addEventListener('click', function() {
+                const extension = fileType.split('/')[1] || 'jpg';
+                let finalName = input.value.trim() || 'renamed_image';
+                if (!finalName.endsWith(`.${extension}`)) {
+                    finalName += `.${extension}`;
+                }
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = imgSrc;
+                downloadLink.download = finalName;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+            });
+
+            row.appendChild(img);
+            row.appendChild(infoSection);
+            row.appendChild(saveBtn);
+
+            gallery.appendChild(row);
+        }
+    </script>
+
+</body>
+</html>
