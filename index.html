@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Image Picker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #f4f4f9;
+        }
+        .drop-zone {
+            border: 2px dashed #007bff;
+            padding: 30px;
+            background: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .drop-zone:hover {
+            background: #e9f5ff;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+        .image-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 6px;
+            width: 140px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: left;
+        }
+        .image-card img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .image-card p {
+            font-size: 11px;
+            margin: 5px 0 0 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Select Your Images</h2>
+    
+    <label class="drop-zone">
+        <p>Click here or drag & drop images</p>
+        <input type="file" id="imageInput" accept="image/*" multiple>
+    </label>
+
+    <div class="gallery" id="gallery"></div>
+
+    <script>
+        const imageInput = document.getElementById('imageInput');
+        const gallery = document.getElementById('gallery');
+
+        imageInput.addEventListener('change', function(event) {
+            const files = event.target.files;
+            
+            // Clear previous gallery items if you want to replace them
+            // gallery.innerHTML = ''; 
+
+            for (let file of files) {
+                if (!file.type.startsWith('image/')) continue;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const card = document.createElement('div');
+                    card.className = 'image-card';
+
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+
+                    const name = document.createElement('p');
+                    name.textContent = file.name;
+
+                    card.appendChild(img);
+                    card.appendChild(name);
+                    gallery.appendChild(card);
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+    </script>
+
+</body>
+</html>
