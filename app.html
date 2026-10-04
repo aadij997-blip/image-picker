@@ -3,19 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quick Image Picker - V2</title>
+    <title>AI Content Image Renamer</title>
+    
+    <!-- Load Transformers.js for browser-based computer vision -->
+    <script type="module">
+        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
+
+        let classifier = null;
+        const statusDiv = document.getElementById('status');
+        const imageInput = document.getElementById('imageInput');
+        const gallery = document.getElementById('gallery');
+
+        // Load the vision model
+        async function loadAI() {
+            try {
+                statusDiv.textContent = "Loading AI Vision Model (takes a few seconds)...";
+                // Using a fast, lightweight image classification model
+                classifier = await pipeline('image-classification', 'Xenova/mobilenet_v2_1.0_224');
+                statusDiv.textContent = "AI Ready! Upload your images below.";
+                imageInput.disabled = false;
+            } catch (err) {
+                statusDiv.textContent = "Error loading AI. Please refresh the page.";
+                console.error(err);
+            }
+        }
+        loadAI();
+
+        imageInput.addEventListener('change', async function(event) {
+            const files = event.target.files;
+            if (files.length === 0 || !classifier) return;
+
+            statusDiv.textContent = "AI is analyzing image contents...";
+
+            for (let file of files) {
+                if (!file.type.startsWith('image/')) continue;
+
+                const imgSrc = URL.createObjectURL(file);
+                
+                try {
+                    // Run the AI vision pipeline on the image source URL
+                    const output = await classifier(imgSrc);
+                    
+                    if (output && output.length > 0) {
+                        // Extract top label, clean it up into a file-safe slug
+                        let rawLabel = output[0].label.split(',')[0].trim();
+                        let suggestedName = rawLabel.toLowerCase().replace(/[^a-z0-9]/g, "-");
+                        
+                        // Enforce max 25 characters limit
+                        if (suggestedName.length > 25) {
+                            suggestedName = suggestedName.substring(0, 25);
+                        }
+
+                        createImageRow(imgSrc, file.name, suggestedName, file.type);
+                    }
+                } catch (error) {
+                    console.error("Classification failed:", error);
+                    createImageRow(imgSrc, file.name, "image-file", file.type);
+                }
+            }
+            statusDiv.textContent = "AI Ready! Upload more images anytime.";
+        });
+
+        function createImageRow(imgSrc, originalName, suggestedName, fileType) {
+            const row = document.createElement('div');
+            row.className = 'image-row';
+
+            const img = document.createElement('img');
+            img.src = imgSrc;
+
+            const infoSection = document.createElement('div');
+            infoSection.className = 'info-section';
+
+            const origText = document.createElement('p');
+            origText.className = 'original-name';
+            origText.textContent = `Original: ${originalName}`;
+
+            const inputContainer = document.createElement('div');
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'name-input';
+            input.value = suggestedName;
+            input.maxLength = 25;
+
+            const charCount = document.createElement('span');
+            charCount.className = 'char-count';
+            charCount.textContent = `${input.value.length}/25 chars`;
+
+            input.addEventListener('input', () => {
+                charCount.textContent = `${input.value.length}/25 chars`;
+            });
+
+            inputContainer.appendChild(input);
+            inputContainer.appendChild(charCount);
+
+            infoSection.appendChild(origText);
+            infoSection.appendChild(inputContainer);
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'save-btn';
+            saveBtn.textContent = 'Save File';
+
+            // Download action with the updated name
+            saveBtn.addEventListener('click', function() {
+                const extension = fileType.split('/')[1] || 'jpg';
+                let finalName = input.value.trim() || 'renamed_image';
+                if (!finalName.endsWith(`.${extension}`)) {
+                    finalName += `.${extension}`;
+                }
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = imgSrc;
+                downloadLink.download = finalName;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+            });
+
+            row.appendChild(img);
+            row.appendChild(infoSection);
+            row.appendChild(saveBtn);
+
+            gallery.appendChild(row);
+        }
+    </script>
+
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 40px auto;
+            max-width: 650px;
+            margin: 30px auto;
             padding: 20px;
             text-align: center;
             background-color: #f4f4f9;
         }
         .drop-zone {
             border: 2px dashed #007bff;
-            padding: 30px;
+            padding: 25px;
             background: #fff;
             border-radius: 8px;
             cursor: pointer;
@@ -29,107 +153,86 @@
         input[type="file"] {
             display: none;
         }
-        /* NEW: Styling for our clear button */
-        .clear-btn {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-bottom: 20px;
-            display: none; /* Hidden by default until images are added */
-        }
-        .clear-btn:hover {
-            background-color: #b02a37;
+        #status {
+            font-size: 13px;
+            color: #007bff;
+            font-weight: bold;
+            margin-bottom: 15px;
         }
         .gallery {
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column;
             gap: 15px;
-            justify-content: center;
         }
-        .image-card {
+        .image-row {
             background: #fff;
             border: 1px solid #ddd;
-            padding: 10px;
+            padding: 12px;
             border-radius: 6px;
-            width: 140px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             text-align: left;
         }
-        .image-card img {
-            width: 100%;
-            height: 100px;
+        .image-row img {
+            width: 70px;
+            height: 70px;
             object-fit: cover;
             border-radius: 4px;
+            flex-shrink: 0;
         }
-        .image-card p {
+        .info-section {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .original-name {
             font-size: 11px;
-            margin: 5px 0 0 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            color: #666;
+            margin: 0;
+        }
+        .name-input {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 13px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .save-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
             white-space: nowrap;
+        }
+        .save-btn:hover {
+            background-color: #218838;
+        }
+        .char-count {
+            font-size: 10px;
+            color: #888;
         }
     </style>
 </head>
 <body>
 
-    <h2>Select Your Images (Version 2)</h2>
+    <h2>AI Content Image Renamer</h2>
+    <p style="font-size: 13px; color: #555;">Upload photos. The browser AI scans what is physically inside the picture, names it based on content (under 25 chars), and lets you save it!</p>
     
+    <div id="status">Initializing...</div>
+
     <label class="drop-zone">
-        <p>Click here or drag & drop images</p>
-        <input type="file" id="imageInput" accept="image/*" multiple>
+        <p style="margin:0;">Click here or drag & drop images</p>
+        <input type="file" id="imageInput" accept="image/*" multiple disabled>
     </label>
 
-    <!-- NEW: Clear button element -->
-    <button id="clearBtn" class="clear-btn">Clear All Images</button>
-
     <div class="gallery" id="gallery"></div>
-
-    <script>
-        const imageInput = document.getElementById('imageInput');
-        const gallery = document.getElementById('gallery');
-        const clearBtn = document.getElementById('clearBtn');
-
-        imageInput.addEventListener('change', function(event) {
-            const files = event.target.files;
-
-            for (let file of files) {
-                if (!file.type.startsWith('image/')) continue;
-
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const card = document.createElement('div');
-                    card.className = 'image-card';
-
-                    const img = document.createElement('img');
-                    img.src = e.target.result;
-
-                    const name = document.createElement('p');
-                    name.textContent = file.name;
-
-                    card.appendChild(img);
-                    card.appendChild(name);
-                    gallery.appendChild(card);
-                }
-                reader.readAsDataURL(file);
-            }
-
-            // NEW: Show the clear button once images are selected
-            if (files.length > 0) {
-                clearBtn.style.display = 'inline-block';
-            }
-        });
-
-        // NEW: Event listener to clear the gallery when the button is clicked
-        clearBtn.addEventListener('click', function() {
-            gallery.innerHTML = ''; // Empties out the images
-            imageInput.value = '';  // Resets the file input cache
-            clearBtn.style.display = 'none'; // Hides the button again
-        });
-    </script>
 
 </body>
 </html>
