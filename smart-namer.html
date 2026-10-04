@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Smart Image Renamer</title>
+    <title>AI Vision Image Renamer</title>
+    
+    <!-- Load TensorFlow.js and MobileNet AI model from free public CDNs -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -29,11 +34,16 @@
         input[type="file"] {
             display: none;
         }
+        #status {
+            font-size: 13px;
+            color: #007bff;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
         .gallery {
             display: flex;
             flex-direction: column;
             gap: 15px;
-            margin-top: 20px;
         }
         .image-row {
             background: #fff;
@@ -93,55 +103,78 @@
 </head>
 <body>
 
-    <h2>Smart Image Renamer</h2>
-    <p style="font-size: 13px; color: #555;">Upload images, review the content-based suggested names (max 25 characters), edit them if needed, and save them!</p>
+    <h2>AI Vision Image Renamer</h2>
+    <p style="font-size: 13px; color: #555;">Upload images. The browser AI will scan the contents, suggest a clean name under 25 chars, and let you save it!</p>
     
+    <div id="status">Loading AI Vision Model... Please wait.</div>
+
     <label class="drop-zone">
         <p style="margin:0;">Click here or drag & drop images</p>
-        <input type="file" id="imageInput" accept="image/*" multiple>
+        <input type="file" id="imageInput" accept="image/*" multiple disabled>
     </label>
 
     <div class="gallery" id="gallery"></div>
 
     <script>
+        let aiModel = null;
+        const statusDiv = document.getElementById('status');
         const imageInput = document.getElementById('imageInput');
         const gallery = document.getElementById('gallery');
 
-        imageInput.addEventListener('change', function(event) {
+        // 1. Load the free MobileNet AI model when the page opens
+        async function loadAI() {
+            try {
+                aiModel = await mobilenet.load();
+                statusDiv.textContent = "AI Ready! Upload your images below.";
+                imageInput.disabled = false; // Enable file picker once AI is loaded
+            } catch (error) {
+                statusDiv.textContent = "Error loading AI model. Try refreshing the page.";
+                console.error(error);
+            }
+        }
+        loadAI();
+
+        imageInput.addEventListener('change', async function(event) {
             const files = event.target.files;
+            if (files.length > 0) {
+                statusDiv.textContent = "Analyzing image contents with AI...";
+            }
 
             for (let file of files) {
                 if (!file.type.startsWith('image/')) continue;
 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const imgSrc = e.target.result;
-                    
-                    // Generate a smart content-based suggestion under 25 chars
-                    const suggestedName = generateSmartName(file);
+                // Load image into memory to pass to AI
+                const imgSrc = URL.createObjectURL(file);
+                const tempImg = document.createElement('img');
+                tempImg.src = imgSrc;
 
-                    createImageRow(imgSrc, file.name, suggestedName, file.type);
-                }
-                reader.readAsDataURL(file);
+                await new Promise((resolve) => {
+                    tempImg.onload = async () => {
+                        let suggestedName = "my_image";
+                        try {
+                            // Have the AI classify the image content
+                            const predictions = await aiModel.classify(tempImg);
+                            if (predictions && predictions.length > 0) {
+                                // Take the top guess, clean it up for a file name
+                                let rawLabel = predictions[0].className.split(',')[0]; // Get first label
+                                suggestedName = rawLabel.toLowerCase().replace(/[^a-z0-9]/g, "-");
+                                
+                                // Ensure it fits under 25 characters limit
+                                if (suggestedName.length > 25) {
+                                    suggestedName = suggestedName.substring(0, 25);
+                                }
+                            }
+                        } catch (err) {
+                            console.error("AI classification error:", err);
+                        }
+
+                        createImageRow(imgSrc, file.name, suggestedName, file.type);
+                        resolve();
+                    };
+                });
             }
+            statusDiv.textContent = "AI Ready! Upload more images anytime.";
         });
-
-        // Function that analyzes file properties to create a smart short name (< 25 chars)
-        function generateSmartName(file) {
-            let baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-            baseName = baseName.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
-
-            // Create a concise descriptive name based on type and features
-            let prefix = "img";
-            if (file.type.includes("png")) prefix = "graphic";
-            if (file.type.includes("jpeg") || file.type.includes("jpg")) prefix = "photo";
-            
-            let combined = `${prefix}_${baseName}`;
-            if (combined.length > 22) {
-                combined = combined.substring(0, 22);
-            }
-            return combined;
-        }
 
         function createImageRow(imgSrc, originalName, suggestedName, fileType) {
             const row = document.createElement('div');
@@ -163,7 +196,7 @@
             input.type = 'text';
             input.className = 'name-input';
             input.value = suggestedName;
-            input.maxLength = 25; // Enforces max 25 characters limit
+            input.maxLength = 25;
 
             const charCount = document.createElement('span');
             charCount.className = 'char-count';
